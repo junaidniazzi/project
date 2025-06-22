@@ -1,0 +1,67 @@
+from sklearn.cluster import KMeans
+from geopy.distance import geodesic
+import pandas as pd
+
+# Sample dataset: [Name, Latitude, Longitude, Category, Cost (1=low, 2=med, 3=high)]
+locations = [
+    ["Museum of History", 33.7294, 73.0931, "history", 2],
+    ["Lake View Park", 33.7167, 73.1000, "nature", 1],
+    ["Centaurus Mall", 33.7090, 73.0551, "shopping", 3],
+    ["Faisal Mosque", 33.7294, 73.0380, "religious", 1],
+    ["Saidpur Village", 33.7370, 73.0600, "cultural", 2],
+    ["Daman-e-Koh", 33.7500, 73.0480, "nature", 2],
+    ["Shakarparian", 33.6930, 73.0600, "nature", 1],
+]
+
+df = pd.DataFrame(locations, columns=["Name", "Lat", "Lon", "Category", "Cost"])
+
+# --- USER INPUT ---
+print("Welcome to the Dynamic Tourist Guide")
+print("Valid Latitude Range: -90 to 90")
+print("Valid Longitude Range: -180 to 180")
+
+user_category = input("What type of place do you prefer? (nature/history/shopping/religious/cultural): ").strip().lower()
+user_budget = int(input("What is your cost preference? (1=low, 2=medium, 3=high): "))
+
+# Validate latitude and longitude input
+try:
+    user_lat = float(input("Enter your current latitude: "))
+    user_lon = float(input("Enter your current longitude: "))
+
+    if not (-90 <= user_lat <= 90):
+        raise ValueError("Latitude must be between -90 and 90 degrees.")
+    if not (-180 <= user_lon <= 180):
+        raise ValueError("Longitude must be between -180 and 180 degrees.")
+
+except ValueError as ve:
+    print(f"Input Error: {ve}")
+    exit()
+
+# --- RULE-BASED FILTERING ---
+filtered_df = df[(df["Category"] == user_category) & (df["Cost"] <= user_budget)]
+
+if filtered_df.empty:
+    print("No locations match your preferences. Try changing category or cost level.")
+    exit()
+
+# --- CLUSTERING ---
+kmeans = KMeans(n_clusters=2, random_state=0)
+filtered_df["Cluster"] = kmeans.fit_predict(filtered_df[["Lat", "Lon"]])
+
+# --- HEURISTIC SEARCH (Nearest Location) ---
+def get_travel_time(lat1, lon1, lat2, lon2):
+    return geodesic((lat1, lon1), (lat2, lon2)).km
+
+filtered_df["Distance (km)"] = filtered_df.apply(
+    lambda row: get_travel_time(user_lat, user_lon, row["Lat"], row["Lon"]), axis=1)
+
+# Sort by distance (heuristic: nearest first)
+result_df = filtered_df.sort_values(by="Distance (km)").reset_index(drop=True)
+
+# --- OUTPUT ---
+print("\nRecommended Locations:")
+for index, row in result_df.iterrows():
+    print(f"\n{index + 1}. {row['Name']}")
+    print(f"   Category: {row['Category']}")
+    print(f"   Cost Level: {row['Cost']}")
+    print(f"   Distance: {row['Distance (km)']:.2f} km")
